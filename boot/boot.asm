@@ -1,54 +1,69 @@
-[org 0x00]
+[org 0x7c00]
 [bits 16]
 
 section code
 
-.init:
-    mov eax, 0x07c0
-    mov ds, eax
-    mov eax, 0xb800
-    mov es, eax
-    mov eax, 0 ; set eax to 0 -> i = 0
-    mov ebx, 0 ; Index of the character in the string that we are printing
-    mov ecx, 0 ; Actual address of the chracter on the screen memory
-    mov dl, 0 ; Actual value of the character that we are printing
+.switch:
+    mov bx, 0x1000 ; This is the location where the code is loaded from hard disk
+    mov ah, 0x02
+    mov al, 30 ; The number of sectors to read from hard disk
+    mov ch, 0x00
+    mov dh, 0x00
+    mov cl, 0x02
+    int 0x13
 
-.clear:
-    mov byte [es:eax], 0
-    inc eax
-    mov byte [es:eax], 0x30
-    inc eax
+    cli ; Turh off the interrupts
+    lgdt [gdt_descriptor] ; Load the GDT Table
 
-    cmp eax, 2 * 25 * 80
+    mov eax, cr0
+    or eax, 0x1
+    mov cr0, eax ; Make the switch
 
-    jl .clear
+    jmp code_seg:protected_start
 
-mov eax, text1
-call .print
-;call .print
+welcome: db 'Welcome to SaphireOS.', 0
 
-.end:
+[bits 32]
+protected_start:
+    mov ax, data_seg
+    mov ds, ax
+    mov ss, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    ; Update the stack pointer
+    mov ebp, 0x90000
+    mov esp, ebp
+
+    call 0x1000
     jmp $
 
-.print:
-    mov dl, byte [eax + ebx]
-    
-    cmp dl, 0
-    je .print_end
-    
-    mov byte [es:ecx], dl
+gdt_begin:
+gdt_null_descriptor:
+    dd 0x00
+    dd 0x00
+gdt_code_seg:
+    dw 0xffff
+    dw 0x00
+    db 0x00
+    db 10011010b
+    db 11001111b
+    db 0x00
+gdt_data_seg:
+    dw 0xffff
+    dw 0x00
+    db 0x00
+    db 10010010b
+    db 11001111b
+    db 0x00
+gdt_end:
+gdt_descriptor:
+    dw gdt_end - gdt_begin - 1
+    dd gdt_begin
 
-    inc ebx
-    inc ecx
-    inc ecx
-    
-    jmp .print
-
-.print_end:
-    ret
-
-text: db 'Hello, World!,', 0
-text1: db 'This is another text', 0
+code_seg equ gdt_code_seg - gdt_begin
+data_seg equ gdt_data_seg - gdt_begin
 
 times 510 - ($ - $$) db 0x00 ; Pads the file with 0s, making the file the right size
 
